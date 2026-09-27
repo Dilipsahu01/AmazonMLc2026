@@ -15,7 +15,8 @@ class TFIDFIndexer:
             ngram_range=ngram_range,
             min_df=min_df,
             max_df=max_df,
-            lowercase=False # Input is already lowercased from preprocessing
+            lowercase=False, # Input is already lowercased from preprocessing
+            dtype=np.float32 # Save massive amount of RAM compared to default float64
         )
         self.is_fitted = False
 

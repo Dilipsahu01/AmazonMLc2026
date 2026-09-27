@@ -23,11 +23,18 @@ def compute_name_features(df: pd.DataFrame, prefix1='s1', prefix2='S2') -> pd.Da
     
     for n1, n2 in zip(names1, names2):
         if not n1 and not n2:
-            f_jw.append(1.0)
-            f_lev.append(1.0)
-            f_token_sort.append(100)
-            f_token_set.append(100)
-            f_len_diff.append(0)
+            f_jw.append(-1.0)
+            f_lev.append(-1.0)
+            f_token_sort.append(-1)
+            f_token_set.append(-1)
+            f_len_diff.append(-1)
+            continue
+        if not n1 or not n2:
+            f_jw.append(0.0)
+            f_lev.append(0.0)
+            f_token_sort.append(0)
+            f_token_set.append(0)
+            f_len_diff.append(abs(len(n1) - len(n2)))
             continue
             
         f_jw.append(jellyfish.jaro_winkler_similarity(n1, n2))

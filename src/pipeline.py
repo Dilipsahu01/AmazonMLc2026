@@ -7,107 +7,100 @@ from src.blocking.pipeline import BlockingPipeline
 from src.features.feature_pipeline import build_features
 from src.matching.lgbm_matcher import LGBMMatcher
 from src.matching.singleton_detector import apply_singleton_threshold
+from src.postprocessing.submission_generator import generate_submission
 
 def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = None):
     """
-    Runs the entire Amazon ML Challenge pipeline.
-    If sample_size is provided, it runs on a subset (for quick testing).
+    Runs the entire Amazon ML Challenge pipeline properly split into Train and Test.
     """
     print("=== AMAZON ML CHALLENGE ER PIPELINE ===")
     os.makedirs(output_dir, exist_ok=True)
     
-    # ---------------------------------------------------------
-    # 1. LOAD AND PREPROCESS DATA
-    # ---------------------------------------------------------
-    print("\n[1] Loading and Preprocessing Training Data...")
-    df_s1 = load_and_preprocess(f"{data_dir}/train/train_source1.tsv")
-    df_s2 = load_and_preprocess(f"{data_dir}/train/train_source2.tsv")
+    # =========================================================================
+    # PHASE A: TRAINING
+    # =========================================================================
+    print("\n--- PHASE A: TRAINING ---")
+    print("[1] Loading Training Data (Subsampled for RAM constraints)...")
     
-    if sample_size:
-        df_s1 = df_s1.head(sample_size).copy()
-        
+    # For training, we must sample to fit in memory
+    train_sample_size = sample_size if sample_size else 50000 
+    df_s1_train = load_and_preprocess(f"{data_dir}/train/train_source1.tsv").head(train_sample_size)
+    
+    # Load full S2 and S3 for blocking
+    df_s2_train = load_and_preprocess(f"{data_dir}/train/train_source2.tsv")
+    df_s3_train = load_and_preprocess(f"{data_dir}/train/train_source3.tsv")
     df_gt = pd.read_csv(f"{data_dir}/train/train_ground_truth.tsv", sep='\t', na_filter=False)
     
-    # ---------------------------------------------------------
-    # 2. BLOCKING (Candidate Generation)
-    # ---------------------------------------------------------
-    print("\n[2] Running TF-IDF Blocking...")
-    blocker = BlockingPipeline(top_k=50, ngram_range=(3, 3))
+    print("\n[2] Blocking Training Candidates...")
+    blocker = BlockingPipeline(top_k=20, ngram_range=(3, 3))
     
-    # Filter S2 to only valid countries to save RAM during blocking
-    valid_countries = df_s1['country'].unique()
-    df_s2_filtered = df_s2[df_s2['country'].isin(valid_countries)]
+    cand_s2_train = blocker.run(df_s1_train, df_s2_train, s2_prefix='S2')
+    cand_s3_train = blocker.run(df_s1_train, df_s3_train, s2_prefix='S3')
     
-    candidates_df = blocker.run(df_s1, df_s2_filtered, s2_prefix='S2')
+    # Combine S2 and S3 candidates
+    cand_s3_train.rename(columns={'S3_entity_id': 'S2_entity_id'}, inplace=True)
+    candidates_train = pd.concat([cand_s2_train, cand_s3_train], ignore_index=True)
     
-    # ---------------------------------------------------------
-    # 3. LABELING THE CANDIDATES (For Training)
-    # ---------------------------------------------------------
     print("\n[3] Generating Training Labels...")
-    # Parse ground truth to a fast lookup set
     true_pairs = set()
-    s1_ids = set(df_s1['entity_id'])
+    s1_ids = set(df_s1_train['entity_id'])
     
     df_gt_sample = df_gt[df_gt['source1_entity_id'].isin(s1_ids)]
     for _, row in df_gt_sample.iterrows():
         s1_id = row['source1_entity_id']
         matches_str = row['matched_entity_ids']
         if matches_str:
-            matches = str(matches_str).split(',')
-            for match in matches:
+            for match in str(matches_str).split(','):
                 true_pairs.add((s1_id, match))
                 
-    # Assign labels
-    candidates_df['is_match'] = candidates_df.apply(
-        lambda r: 1 if (r['s1_entity_id'], r['S2_entity_id']) in true_pairs else 0, 
-        axis=1
+    candidates_train['is_match'] = candidates_train.apply(
+        lambda r: 1 if (r['s1_entity_id'], r['S2_entity_id']) in true_pairs else 0, axis=1
     )
     
-    print(f"Total candidates: {len(candidates_df)}")
-    print(f"True matches in candidates: {candidates_df['is_match'].sum()}")
+    print("\n[4] Extracting Train Features...")
+    df_s2_s3_combined = pd.concat([df_s2_train, df_s3_train], ignore_index=True)
+    X_train = build_features(candidates_train, df_s1_train, df_s2_s3_combined, s2_prefix='S2')
+    y_train = candidates_train['is_match'].values
     
-    # ---------------------------------------------------------
-    # 4. FEATURE ENGINEERING
-    # ---------------------------------------------------------
-    print("\n[4] Extracting Machine Learning Features...")
-    # This returns just the feature columns
-    X_train = build_features(candidates_df, df_s1, df_s2, s2_prefix='S2')
-    y_train = candidates_df['is_match'].values
-    
-    # ---------------------------------------------------------
-    # 5. MODEL TRAINING (LightGBM)
-    # ---------------------------------------------------------
     print("\n[5] Training LightGBM Matcher...")
     matcher = LGBMMatcher()
-    # In a real scenario, we'd split a validation set. For this pipeline we train on all.
     matcher.fit(X_train, y_train)
     
-    importances = matcher.get_feature_importances()
-    print("\nTop 5 Important Features:")
-    print(importances.head(5))
+    # Clear RAM
+    del df_s1_train, df_s2_train, df_s3_train, candidates_train, X_train, y_train, df_s2_s3_combined
+    gc.collect()
     
-    # ---------------------------------------------------------
-    # 6. INFERENCE & POST-PROCESSING
-    # ---------------------------------------------------------
-    print("\n[6] Predicting & Applying Singleton Thresholds...")
-    candidates_df['match_prob'] = matcher.predict_proba(X_train)
+    # =========================================================================
+    # PHASE B: INFERENCE (TEST SET)
+    # =========================================================================
+    print("\n--- PHASE B: INFERENCE (TEST) ---")
+    print("[1] Loading Test Data...")
+    df_s1_test = load_and_preprocess(f"{data_dir}/test/test_source1.tsv")
+    df_s2_test = load_and_preprocess(f"{data_dir}/test/test_source2.tsv")
+    df_s3_test = load_and_preprocess(f"{data_dir}/test/test_source3.tsv")
     
-    # Apply the threshold logic
-    # singleton_threshold = 0.6: If best match < 0.6, return EMPTY
-    # match_threshold = 0.4: Return all matches >= 0.4
-    final_matches = apply_singleton_threshold(candidates_df, singleton_threshold=0.6, match_threshold=0.4)
+    if sample_size:
+        df_s1_test = df_s1_test.head(sample_size).copy()
+        
+    s1_universe = df_s1_test['entity_id'].tolist()
     
-    print(f"Final predicted matches: {len(final_matches)}")
+    print("\n[2] Blocking Test Candidates...")
+    cand_s2_test = blocker.run(df_s1_test, df_s2_test, s2_prefix='S2')
+    cand_s3_test = blocker.run(df_s1_test, df_s3_test, s2_prefix='S3')
     
-    # ---------------------------------------------------------
-    # 7. GENERATE SUBMISSION
-    # ---------------------------------------------------------
-    print("\n[7] Generating Submission File...")
-    from src.postprocessing.submission_generator import generate_submission
+    cand_s3_test.rename(columns={'S3_entity_id': 'S2_entity_id'}, inplace=True)
+    candidates_test = pd.concat([cand_s2_test, cand_s3_test], ignore_index=True)
     
-    # We pass both the final matches and the original candidates
-    # This generates matching_results.tsv AND candidate_pairs.tsv
-    matching, candidates = generate_submission(final_matches, candidates_df, output_dir)
+    print("\n[3] Extracting Test Features...")
+    df_s2_s3_test = pd.concat([df_s2_test, df_s3_test], ignore_index=True)
+    X_test = build_features(candidates_test, df_s1_test, df_s2_s3_test, s2_prefix='S2')
+    
+    print("\n[4] Predicting & Applying Thresholds...")
+    candidates_test['match_prob'] = matcher.predict_proba(X_test)
+    final_matches = apply_singleton_threshold(candidates_test, singleton_threshold=0.6, match_threshold=0.4)
+    
+    print("\n[5] Generating Submission Files...")
+    matching, candidates = generate_submission(final_matches, candidates_test, s1_universe, output_dir)
     
     print("Pipeline Execution Complete!")
     return matching

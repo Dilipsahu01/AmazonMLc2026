@@ -11,13 +11,18 @@ def build_features(df_pairs: pd.DataFrame, df_s1: pd.DataFrame, df_s2: pd.DataFr
     """
     print("Building features for candidate pairs...")
     
+    # Only keep the necessary columns to save RAM (drop raw text)
+    cols_to_keep = ['entity_id', 'norm_name', 'norm_address', 'addr_pincode', 'addr_numbers', 'addr_street_type']
+    
+    df_s1_slim = df_s1[[c for c in cols_to_keep if c in df_s1.columns]]
+    df_s2_slim = df_s2[[c for c in cols_to_keep if c in df_s2.columns]]
+    
     # 1. Join S1 data
-    df_s1_renamed = df_s1.add_prefix('s1_')
-    # The pairs df should have 's1_entity_id' and 'S2_entity_id'
+    df_s1_renamed = df_s1_slim.add_prefix('s1_')
     merged = df_pairs.merge(df_s1_renamed, on='s1_entity_id', how='left')
     
     # 2. Join S2 data
-    df_s2_renamed = df_s2.add_prefix(f'{s2_prefix}_')
+    df_s2_renamed = df_s2_slim.add_prefix(f'{s2_prefix}_')
     merged = merged.merge(df_s2_renamed, on=f'{s2_prefix}_entity_id', how='left')
     
     # 3. Compute Features

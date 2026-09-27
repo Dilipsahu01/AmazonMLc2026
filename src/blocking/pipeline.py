@@ -44,10 +44,9 @@ class BlockingPipeline:
             # TF-IDF
             # Note: We fit TF-IDF only on S2 partition to build the vocabulary of the target database
             indexer = TFIDFIndexer(ngram_range=self.ngram_range, min_df=1) # min_df=1 for small partitions
-            indexer.fit(df_s2_c)
             
+            s2_matrix = indexer.fit_transform(df_s2_c)
             s1_matrix = indexer.transform(df_s1_c)
-            s2_matrix = indexer.transform(df_s2_c)
             
             # Candidate Generation
             generator = CandidateGenerator(top_k=self.top_k)

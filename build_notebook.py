@@ -3,11 +3,13 @@ import glob
 import os
 
 files = [
+    'src/config.py',
+    'src/preprocessing/__init__.py',
     'src/preprocessing/transliteration.py',
     'src/preprocessing/text_normalizer.py',
     'src/preprocessing/country_normalizer.py',
     'src/preprocessing/name_normalizer.py',
-    'src/preprocessing/address_normalizer.py',
+    'src/preprocessing/address_parser.py',
     'src/data_loader.py',
     'src/blocking/country_partition.py',
     'src/blocking/indexer.py',
@@ -45,8 +47,8 @@ cells.append({
     "outputs": [],
     "source": [
         "!mkdir -p src/preprocessing src/blocking src/evaluation src/features src/matching src/postprocessing\n",
-        "!touch src/__init__.py src/preprocessing/__init__.py src/blocking/__init__.py src/evaluation/__init__.py src/features/__init__.py src/matching/__init__.py src/postprocessing/__init__.py\n",
-        "!pip install unidecode scikit-learn pandas scipy thefuzz jellyfish lightgbm"
+        "!touch src/__init__.py src/blocking/__init__.py src/evaluation/__init__.py src/features/__init__.py src/matching/__init__.py src/postprocessing/__init__.py\n",
+        "!pip install unidecode scikit-learn pandas scipy thefuzz jellyfish lightgbm sparse-dot-topn"
     ]
 })
 
