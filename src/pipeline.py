@@ -37,9 +37,9 @@ def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = N
     df_s3_train = load_and_preprocess(get_path("train_source3.tsv", "train"))
     df_gt = pd.read_csv(get_path("train_ground_truth.tsv", "train"), sep='\t', na_filter=False)
     
-    print("\n[2] Blocking Training Candidates (Union TF-IDF + Embeddings)...")
-    from src.blocking.union_blocker import UnionBlocker
-    blocker = UnionBlocker(top_k_tfidf=50, top_k_embed=50, ngram_range=(3, 3))
+    print("\n[2] Blocking Training Candidates (TF-IDF only for local run)...")
+    from src.blocking.pipeline import BlockingPipeline
+    blocker = BlockingPipeline(top_k=20, ngram_range=(3, 3))
     
     cand_s2_train = blocker.run(df_s1_train, df_s2_train, s2_prefix='S2')
     cand_s3_train = blocker.run(df_s1_train, df_s3_train, s2_prefix='S3')
@@ -69,8 +69,9 @@ def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = N
     X_train = build_features(candidates_train, df_s1_train, df_s2_s3_combined, s2_prefix='S2')
     y_train = candidates_train['is_match'].values
     
-    print("\n[5] Training LightGBM Matcher...")
-    matcher = LGBMMatcher()
+    print("\n[5] Training CatBoost Matcher...")
+    from src.matching.catboost_matcher import CatBoostMatcher
+    matcher = CatBoostMatcher({'iterations': 300, 'learning_rate': 0.05, 'verbose': 0})
     matcher.fit(X_train, y_train)
     
     # Clear RAM

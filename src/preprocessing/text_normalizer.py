@@ -12,8 +12,8 @@ def normalize_text(text: str) -> str:
     if pd.isna(text) or str(text).strip() == "":
         return ""
     
-    text = transliterate_text(str(text))
-    text = text.lower()
+    # text = transliterate_text(str(text)) # Disabled for fast local CPU testing
+    text = str(text).lower()
     
     # Keep only alphanumeric and spaces
     text = re.sub(r'[^a-z0-9\s]', ' ', text)

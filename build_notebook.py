@@ -23,6 +23,7 @@ files = [
     'src/features/cross_features.py',
     'src/features/feature_pipeline.py',
     'src/matching/lgbm_matcher.py',
+    'src/matching/catboost_matcher.py',
     'src/matching/singleton_detector.py',
     'src/postprocessing/submission_generator.py',
     'src/pipeline.py'
@@ -50,7 +51,7 @@ cells.append({
     "source": [
         "!mkdir -p src/preprocessing src/blocking src/evaluation src/features src/matching src/postprocessing\n",
         "!touch src/__init__.py src/blocking/__init__.py src/evaluation/__init__.py src/features/__init__.py src/matching/__init__.py src/postprocessing/__init__.py\n",
-        "!pip install unidecode scikit-learn pandas scipy thefuzz jellyfish lightgbm sparse-dot-topn sentence-transformers faiss-cpu"
+        "!pip install unidecode scikit-learn pandas scipy thefuzz jellyfish lightgbm catboost sparse-dot-topn sentence-transformers faiss-cpu"
     ]
 })
 
