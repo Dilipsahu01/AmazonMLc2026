@@ -1,0 +1,40 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Datasets and large files
+6ab10eb3b23ba_student_resource/
+*.tsv
+*.csv
+*.zip
+*.tar.gz
+*.model
+*.pt
+*.bin
+*.h5
+*.pkl
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Caches
+.cache/
+.tox/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
