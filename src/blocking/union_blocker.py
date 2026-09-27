@@ -9,11 +9,15 @@ class UnionBlocker:
         self.embed_blocker = EmbeddingBlocker(top_k=top_k_embed)
         
     def run(self, df_s1: pd.DataFrame, df_s2: pd.DataFrame, s2_prefix='S2') -> pd.DataFrame:
-        """Runs both blockers per country partition, unions results, and deduplicates."""
-        all_candidates = []
+        """Runs both blockers and unions the results."""
         
-        # We must partition by country, just like BlockingPipeline does, 
-        # to ensure we don't match a US entity to an India entity.
+        # 1. TF-IDF Phase (handles its own country partitioning)
+        print("  [TF-IDF Phase]")
+        cand_tfidf = self.tfidf_blocker.run(df_s1, df_s2, s2_prefix)
+        
+        # 2. Embedding Phase (we must partition manually to respect country boundaries)
+        print("  [Semantic Embedding Phase]")
+        all_embed_cands = []
         countries = [c for c in df_s1['country'].unique() if pd.notna(c)]
         
         for country in countries:
@@ -23,32 +27,18 @@ class UnionBlocker:
             if len(df_s1_part) == 0 or len(df_s2_part) == 0:
                 continue
                 
-            print(f"--- Processing partition: {country} (S1: {len(df_s1_part)}, {s2_prefix}: {len(df_s2_part)}) ---")
-            
-            # 1. TF-IDF Blocking
-            print("  [TF-IDF Phase]")
-            cand_tfidf = self.tfidf_blocker._block_partition(df_s1_part, df_s2_part, s2_prefix)
-            
-            # 2. Embedding Blocking
-            print("  [Semantic Embedding Phase]")
             self.embed_blocker.fit(df_s2_part)
             cand_embed = self.embed_blocker.transform_and_search(df_s1_part, s2_prefix)
+            all_embed_cands.append(cand_embed)
             
-            # 3. Union and Deduplicate
-            combined = pd.concat([cand_tfidf, cand_embed], ignore_index=True)
-            
-            # If a pair was found by both, keep the max score?
-            # Actually, just drop duplicate pairs.
-            # We don't really care about the raw blocking scores in the downstream ML model
-            # because the ML model computes exact Jaro-Winkler anyway.
-            # But we can keep the first occurrence.
-            
-            combined_dedup = combined.drop_duplicates(subset=['s1_entity_id', f'{s2_prefix}_entity_id'], keep='first')
-            
-            print(f"  Union complete. Lexical: {len(cand_tfidf)}, Semantic: {len(cand_embed)}, Merged Unique: {len(combined_dedup)}")
-            all_candidates.append(combined_dedup)
-            
-        if all_candidates:
-            return pd.concat(all_candidates, ignore_index=True)
+        if all_embed_cands:
+            cand_embed_full = pd.concat(all_embed_cands, ignore_index=True)
         else:
-            return pd.DataFrame(columns=['s1_entity_id', f'{s2_prefix}_entity_id'])
+            cand_embed_full = pd.DataFrame(columns=['s1_entity_id', f'{s2_prefix}_entity_id', 'blocking_score_embed'])
+            
+        # 3. Union and Deduplicate
+        combined = pd.concat([cand_tfidf, cand_embed_full], ignore_index=True)
+        combined_dedup = combined.drop_duplicates(subset=['s1_entity_id', f'{s2_prefix}_entity_id'], keep='first')
+        
+        print(f"  Union complete. Lexical: {len(cand_tfidf)}, Semantic: {len(cand_embed_full)}, Merged Unique: {len(combined_dedup)}")
+        return combined_dedup
