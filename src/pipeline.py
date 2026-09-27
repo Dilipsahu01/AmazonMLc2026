@@ -104,8 +104,10 @@ def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = N
     # ---------------------------------------------------------
     print("\n[7] Generating Submission File...")
     from src.postprocessing.submission_generator import generate_submission
-    sub_path = os.path.join(output_dir, "submission.tsv")
-    generate_submission(final_matches, sub_path)
+    
+    # We pass both the final matches and the original candidates
+    # This generates matching_results.tsv AND candidate_pairs.tsv
+    matching, candidates = generate_submission(final_matches, candidates_df, output_dir)
     
     print("Pipeline Execution Complete!")
-    return final_matches
+    return matching
