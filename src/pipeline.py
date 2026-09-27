@@ -22,14 +22,20 @@ def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = N
     print("\n--- PHASE A: TRAINING ---")
     print("[1] Loading Training Data (Subsampled for RAM constraints)...")
     
+    def get_path(filename, subdir):
+        flat_path = f"{data_dir}/{filename}"
+        if os.path.exists(flat_path):
+            return flat_path
+        return f"{data_dir}/{subdir}/{filename}"
+
     # For training, we must sample to fit in memory
     train_sample_size = sample_size if sample_size else 50000 
-    df_s1_train = load_and_preprocess(f"{data_dir}/train/train_source1.tsv").head(train_sample_size)
+    df_s1_train = load_and_preprocess(get_path("train_source1.tsv", "train")).head(train_sample_size)
     
     # Load full S2 and S3 for blocking
-    df_s2_train = load_and_preprocess(f"{data_dir}/train/train_source2.tsv")
-    df_s3_train = load_and_preprocess(f"{data_dir}/train/train_source3.tsv")
-    df_gt = pd.read_csv(f"{data_dir}/train/train_ground_truth.tsv", sep='\t', na_filter=False)
+    df_s2_train = load_and_preprocess(get_path("train_source2.tsv", "train"))
+    df_s3_train = load_and_preprocess(get_path("train_source3.tsv", "train"))
+    df_gt = pd.read_csv(get_path("train_ground_truth.tsv", "train"), sep='\t', na_filter=False)
     
     print("\n[2] Blocking Training Candidates...")
     blocker = BlockingPipeline(top_k=20, ngram_range=(3, 3))
@@ -75,9 +81,9 @@ def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = N
     # =========================================================================
     print("\n--- PHASE B: INFERENCE (TEST) ---")
     print("[1] Loading Test Data...")
-    df_s1_test = load_and_preprocess(f"{data_dir}/test/test_source1.tsv")
-    df_s2_test = load_and_preprocess(f"{data_dir}/test/test_source2.tsv")
-    df_s3_test = load_and_preprocess(f"{data_dir}/test/test_source3.tsv")
+    df_s1_test = load_and_preprocess(get_path("test_source1.tsv", "test"))
+    df_s2_test = load_and_preprocess(get_path("test_source2.tsv", "test"))
+    df_s3_test = load_and_preprocess(get_path("test_source3.tsv", "test"))
     
     if sample_size:
         df_s1_test = df_s1_test.head(sample_size).copy()
