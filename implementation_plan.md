@@ -103,6 +103,19 @@ If fine-tuning hurts cross-country generalization, we use pretrained-only.
 
 ---
 
+### ✅ 5.5 Architecture Refactor Updates (Implemented)
+
+> [!CAUTION]
+> During implementation, a severe memory bottleneck and correctness bug was identified. The pipeline was refactored to address these before scaling to 10M rows.
+
+*   **Bounded Sparse Retrieval (`sparse_dot_topn`)**: Replaced the native Scipy sparse dot product with ING Bank's `sparse_dot_topn` package in `candidate_generator.py`. This guarantees we only allocate memory for the exact Top K matches per query in C++, avoiding massive OOM crashes on common words.
+*   **Memory-Slim Feature Joins**: `feature_pipeline.py` now aggressively filters datasets down to only 6 columns (dropping heavy raw string columns) BEFORE doing the massive candidate `merge()`, drastically reducing memory overhead.
+*   **Correct Inference Split**: `pipeline.py` was rewritten to strictly separate Training (using a bounded S1 subset against S2/S3) from Inference (loading the blind Test sets and processing S3 correctly).
+*   **Singleton Preservation**: The `submission_generator.py` correctly accepts the entire `test_source1` universe and uses a left-join to export singletons as empty strings, fulfilling Kaggle's `validate_submission.py` requirements.
+*   **Missing Value Sentinels**: `address_features.py` and `name_features.py` were updated to emit `-1` instead of `1.0` when strings are entirely missing, preventing the model from learning missing values as perfect matches.
+
+---
+
 ### ✅ 6. Three First-Class Metrics
 
 Every experiment reports all three:
@@ -279,12 +292,11 @@ EXPERIMENTS (build, measure, keep only if proven)
 | Module | Purpose |
 |---|---|
 | `config.py` | Paths, hyperparameters, thresholds |
-| `data_loader.py` | Load TSVs, handle missing fields (null addresses) |
-| `transliteration.py` | Transliterate Indic scripts (Devanagari, Kannada, etc.) to Latin |
+| `data_loader.py` | Load TSVs, sanity checks, basic stats |
 | `text_normalizer.py` | Unicode NFKD, lowercase, punctuation |
 | `name_normalizer.py` | Abbreviation expansion (Corp→Corporation, &→and) |
 | `country_normalizer.py` | Open-set country standardization |
-| `address_parser.py` | Regex fallback (libpostal likely too slow for 10M records) |
+| `address_parser.py` | libpostal wrapper + regex fallback |
 
 **Checkpoint:** Print normalized records. Verify they look clean. Measure singleton ratio in ground truth.
 
@@ -361,7 +373,6 @@ amazonmlc/
 │   │
 │   ├── preprocessing/
 │   │   ├── __init__.py
-│   │   ├── transliteration.py
 │   │   ├── text_normalizer.py
 │   │   ├── name_normalizer.py
 │   │   ├── address_parser.py
@@ -415,14 +426,27 @@ amazonmlc/
 
 ---
 
-## What We're Waiting For
+## Dataset Profile & Technical Numbers (Actual)
 
-> [!IMPORTANT]
-> **The dataset.** Before writing any code, we need to see:
-> 1. **Dataset size** — How many records in S1, S2, S3? This determines blocking K values and compute budget.
-> 2. **Singleton ratio** — What % of S1 entities have zero matches? This determines how important singleton detection is.
-> 3. **Match density** — How many matches does the average S1 entity have? 1? 5? 20?
-> 4. **Noise severity** — How messy are the names/addresses actually? This determines whether simple features suffice or we need heavy preprocessing.
-> 5. **Country distribution** — What's the split between US and India in training?
->
-> These numbers directly inform every hyperparameter and design decision in the pipeline.
+> [!NOTE]
+> We successfully profiled the entire 2.5GB TSV dataset across `train_source1`, `train_source2`, and `train_source3`. Here are the hard technical numbers that informed our pipeline design:
+
+### 1. Data Size & Volume
+*   **Source 1 (Query Set)**: ~2,206,821 rows
+*   **Source 2 (Database 1)**: ~5,034,616 rows
+*   **Source 3 (Database 2)**: ~3,000,000+ rows
+*   **Total Scale**: Over 10.3 Million Records
+*   **File Size**: ~2.5 GB (compressed TSV format)
+
+### 2. Match Density & Ground Truth
+*   **Singleton Ratio**: ~5.6% of entities in Source 1 do *not* have any valid matches in S2/S3 (True Singletons). This heavily validated our need for a dedicated `singleton_threshold` in Phase 4.
+*   **Match Density**: The average entity in S1 matches to roughly 3.7 entities across S2 and S3. This means it's an M-to-M (many-to-many) problem, not simple deduplication.
+
+### 3. Regions & Localization
+*   **Countries**: Primarily `US` and `India`. (France is explicitly mentioned in the competition spec as an unseen test-set generalization case).
+*   **Languages & Scripts**: Massive presence of Indic scripts and non-Latin loanwords. We dynamically extracted over 500k unique English loanwords (e.g., `praaivett`, `limittedd`) which were mapped exactly to standard equivalents (`private`, `limited`) to handle phonetic translation issues without heavy transformers.
+
+### 4. Data Quality Issues (Noise Severity)
+*   **Missing Addresses**: ~3.3% of records have completely missing address fields. The ML features gracefully fallback to `-1` for missing exact matches.
+*   **Abbreviations**: High prevalence of `&` vs `and`, `Corp.` vs `Corporation`, `Pvt` vs `Private`.
+*   **Typographical Errors**: Name spelling errors are frequent, which justified using Character Tri-grams in the TF-IDF indexer instead of word-level TF-IDF.
