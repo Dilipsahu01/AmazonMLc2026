@@ -15,6 +15,8 @@ files = [
     'src/blocking/indexer.py',
     'src/blocking/candidate_generator.py',
     'src/blocking/pipeline.py',
+    'src/blocking/embedding_blocker.py',
+    'src/blocking/union_blocker.py',
     'src/features/name_features.py',
     'src/features/address_features.py',
     'src/features/phonetic_features.py',
@@ -48,7 +50,7 @@ cells.append({
     "source": [
         "!mkdir -p src/preprocessing src/blocking src/evaluation src/features src/matching src/postprocessing\n",
         "!touch src/__init__.py src/blocking/__init__.py src/evaluation/__init__.py src/features/__init__.py src/matching/__init__.py src/postprocessing/__init__.py\n",
-        "!pip install unidecode scikit-learn pandas scipy thefuzz jellyfish lightgbm sparse-dot-topn"
+        "!pip install unidecode scikit-learn pandas scipy thefuzz jellyfish lightgbm sparse-dot-topn sentence-transformers faiss-cpu"
     ]
 })
 

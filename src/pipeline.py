@@ -37,8 +37,9 @@ def run_end_to_end_pipeline(data_dir: str, output_dir: str, sample_size: int = N
     df_s3_train = load_and_preprocess(get_path("train_source3.tsv", "train"))
     df_gt = pd.read_csv(get_path("train_ground_truth.tsv", "train"), sep='\t', na_filter=False)
     
-    print("\n[2] Blocking Training Candidates...")
-    blocker = BlockingPipeline(top_k=20, ngram_range=(3, 3))
+    print("\n[2] Blocking Training Candidates (Union TF-IDF + Embeddings)...")
+    from src.blocking.union_blocker import UnionBlocker
+    blocker = UnionBlocker(top_k_tfidf=50, top_k_embed=50, ngram_range=(3, 3))
     
     cand_s2_train = blocker.run(df_s1_train, df_s2_train, s2_prefix='S2')
     cand_s3_train = blocker.run(df_s1_train, df_s3_train, s2_prefix='S3')
