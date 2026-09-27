@@ -15,6 +15,8 @@ files = [
     'src/blocking/pipeline.py',
     'src/features/name_features.py',
     'src/features/address_features.py',
+    'src/features/phonetic_features.py',
+    'src/features/cross_features.py',
     'src/features/feature_pipeline.py',
     'src/matching/lgbm_matcher.py',
     'src/matching/singleton_detector.py',

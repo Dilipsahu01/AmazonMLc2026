@@ -1,6 +1,8 @@
 import pandas as pd
 from .name_features import compute_name_features
 from .address_features import compute_address_features
+from .phonetic_features import compute_phonetic_features
+from .cross_features import compute_cross_features
 
 def build_features(df_pairs: pd.DataFrame, df_s1: pd.DataFrame, df_s2: pd.DataFrame, s2_prefix: str = 'S2') -> pd.DataFrame:
     """
@@ -25,9 +27,21 @@ def build_features(df_pairs: pd.DataFrame, df_s1: pd.DataFrame, df_s2: pd.DataFr
     print("  Computing address features...")
     addr_feats = compute_address_features(merged, prefix1='s1', prefix2=s2_prefix)
     
+    print("  Computing phonetic features...")
+    phonetic_feats = compute_phonetic_features(merged, prefix1='s1', prefix2=s2_prefix)
+    
+    print("  Computing cross-field features...")
+    cross_feats = compute_cross_features(merged, prefix1='s1', prefix2=s2_prefix)
+    
     # 4. Combine all features
     # Start with the blocking score as the first feature
     feature_matrix = pd.DataFrame({'blocking_score': merged['blocking_score']})
-    feature_matrix = pd.concat([feature_matrix, name_feats, addr_feats], axis=1)
+    feature_matrix = pd.concat([
+        feature_matrix, 
+        name_feats, 
+        addr_feats,
+        phonetic_feats,
+        cross_feats
+    ], axis=1)
     
     return feature_matrix
