@@ -26,14 +26,29 @@ def compute_phonetic_features(df: pd.DataFrame, prefix1='s1', prefix2='S2') -> p
         w1 = n1.split()[0] if n1 else ""
         w2 = n2.split()[0] if n2 else ""
         
+        # Jellyfish strictly requires alphabetical characters for phonetic algorithms
+        alpha_w1 = ''.join(c for c in w1 if c.isalpha()) if w1 else ""
+        alpha_w2 = ''.join(c for c in w2 if c.isalpha()) if w2 else ""
+        
         # Soundex
-        s1 = jellyfish.soundex(w1) if w1 else ""
-        s2 = jellyfish.soundex(w2) if w2 else ""
+        s1 = ""
+        s2 = ""
+        try:
+            s1 = jellyfish.soundex(alpha_w1) if alpha_w1 else ""
+            s2 = jellyfish.soundex(alpha_w2) if alpha_w2 else ""
+        except ValueError:
+            pass
+            
         f_soundex_match.append(1 if (s1 and s1 == s2) else 0)
         
         # Match Rating Approach (MRA)
-        m1 = jellyfish.match_rating_codex(w1) if w1 else ""
-        m2 = jellyfish.match_rating_codex(w2) if w2 else ""
+        m1 = ""
+        m2 = ""
+        try:
+            m1 = jellyfish.match_rating_codex(alpha_w1) if alpha_w1 else ""
+            m2 = jellyfish.match_rating_codex(alpha_w2) if alpha_w2 else ""
+        except ValueError:
+            pass
         
         # Fuzzy match on the MRA code
         f_mra_match.append(fuzz.ratio(m1, m2))
